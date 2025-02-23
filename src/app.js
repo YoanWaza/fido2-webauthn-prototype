@@ -20,7 +20,12 @@ app.use(express.static('public'));
 
 app.use('/api', require('./routes'));
 
+// Exporter l'app sans démarrer le serveur
+module.exports = app;
 
-app.listen(PORT, () => {
-    console.log(`Server running on http://localhost:${PORT}`);
-});
+// Démarrer le serveur uniquement si ce n'est pas un import (pour les tests)
+if (require.main === module) {
+    const server = app.listen(PORT, () => {
+        console.log(`Server running on http://localhost:${PORT}`);
+    });
+}
