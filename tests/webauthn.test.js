@@ -1,5 +1,6 @@
 const request = require('supertest');
 const app = require('../src/app');
+const { performance } = require('perf_hooks');
 
 // Test Vectors based on FIDO2 and WebAuthn specifications
 const TEST_VECTORS = {
@@ -139,6 +140,106 @@ describe('WebAuthn Tests', () => {
             // Even though we expect a 400 here, we validate the error format
             expect(response.status).toBe(400);
             expect(response.body).toHaveProperty('error');
+        });
+    });
+
+    describe('Security Tests', () => {
+        test('Challenge should be cryptographically random and unique', async () => {
+            // Get multiple challenges and verify uniqueness
+            const challenges = new Set();
+            for(let i = 0; i < 10; i++) {
+                const response = await request(app)
+                    .get('/api/register/options')
+                    .set('host', 'localhost:3001');
+                
+                const challenge = response.body.challenge;
+                expect(challenges.has(challenge)).toBe(false); // Should be unique
+                challenges.add(challenge);
+                
+                // Verify challenge length (at least 16 bytes in base64)
+                const decodedChallenge = Buffer.from(challenge, 'base64');
+                expect(decodedChallenge.length).toBeGreaterThanOrEqual(16);
+            }
+        });
+
+        test('Should enforce secure cryptographic parameters', async () => {
+            const response = await request(app)
+                .get('/api/register/options')
+                .set('host', 'localhost:3001');
+
+            // Verify supported algorithms
+            const algorithms = response.body.pubKeyCredParams.map(param => param.alg);
+            
+            // Check for secure algorithms
+            expect(algorithms).toContain(-7);  // ES256 (ECDSA with P-256)
+            expect(algorithms).toContain(-257); // RS256 (RSASSA-PKCS1-v1_5 with SHA-256)
+            
+            // Verify no weak algorithms are present
+            const weakAlgorithms = [-65535]; // Example of weak algorithm
+            algorithms.forEach(alg => {
+                expect(weakAlgorithms).not.toContain(alg);
+            });
+        });
+
+        test('Should have proper session management', async () => {
+            const agent = request.agent(app);
+            
+            // Get registration options
+            const response = await agent
+                .get('/api/register/options')
+                .set('host', 'localhost:3001');
+            
+            // Verify session cookie is set
+            expect(response.headers['set-cookie']).toBeDefined();
+            
+            // Verify session cookie is secure (in production)
+            if (process.env.NODE_ENV === 'production') {
+                expect(response.headers['set-cookie'][0]).toContain('Secure');
+            }
+        });
+    });
+
+    describe('Performance Tests', () => {
+        test('Registration options generation should be fast', async () => {
+            const start = performance.now();
+            
+            await request(app)
+                .get('/api/register/options')
+                .set('host', 'localhost:3001');
+            
+            const duration = performance.now() - start;
+            
+            // Should complete within 100ms
+            expect(duration).toBeLessThan(100);
+        });
+
+        test('Should handle concurrent requests efficiently', async () => {
+            const numberOfRequests = 10;
+            const start = performance.now();
+            
+            // Make multiple concurrent requests
+            const requests = Array(numberOfRequests).fill().map(() => 
+                request(app)
+                    .get('/api/register/options')
+                    .set('host', 'localhost:3001')
+            );
+            
+            const responses = await Promise.all(requests);
+            
+            const duration = performance.now() - start;
+            
+            // All requests should succeed
+            responses.forEach(response => {
+                expect(response.status).toBe(200);
+            });
+            
+            // Average time per request should be reasonable
+            const averageTime = duration / numberOfRequests;
+            expect(averageTime).toBeLessThan(50); // 50ms per request on average
+            
+            // Verify all challenges are unique
+            const challenges = new Set(responses.map(r => r.body.challenge));
+            expect(challenges.size).toBe(numberOfRequests);
         });
     });
 });
