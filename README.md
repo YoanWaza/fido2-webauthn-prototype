@@ -9,8 +9,8 @@ npm
 Clone the repository, install the dependencies, and start the server:
 
 ```
-git clone <repository-url>
-cd <repository-directory>
+git clone https://github.com/YoanWaza/fido2-webauthn-prototype.git
+cd fido2-webauthn-prototype
 npm install
 npm start
 ```
