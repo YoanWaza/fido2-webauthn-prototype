@@ -2,6 +2,7 @@ const express = require('express');
 const bodyParser = require('body-parser');
 const session = require('express-session'); // Import express-session
 const dotenv = require('dotenv');
+const path = require('path');
 
 dotenv.config();
 const app = express();
@@ -16,9 +17,25 @@ app.use(session({
 }));
 
 app.use(bodyParser.json());
-app.use(express.static('public'));
+app.use(express.static(path.join(__dirname, '..', 'public')));
 
 app.use('/api', require('./routes'));
+
+// Route racine pour servir index.html
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, '..', 'public', 'index.html'));
+});
+
+// Gestion des erreurs 404
+app.use((req, res) => {
+    res.status(404).json({ error: 'Route not found' });
+});
+
+// Gestion globale des erreurs
+app.use((err, req, res, next) => {
+    console.error(err.stack);
+    res.status(500).json({ error: 'Something broke!' });
+});
 
 // Exporter l'app sans démarrer le serveur
 module.exports = app;

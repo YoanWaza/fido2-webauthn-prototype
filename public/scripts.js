@@ -1,110 +1,156 @@
-document.getElementById('register-btn').addEventListener('click', async () => {
-    try {
-        // Fetch registration options from the backend
-        const response = await fetch('/api/register/options');
-        const options = await response.json();
+document.addEventListener('DOMContentLoaded', () => {
+    const registerButton = document.getElementById('registerButton');
+    const authenticateButton = document.getElementById('authenticateButton');
+    const statusDisplay = document.getElementById('status');
 
-        // Log the options for debugging
-        console.log("Registration Options:", options);
-
-        // Validate required fields
-        if (!options.challenge || !options.user || !options.user.id) {
-            throw new Error("Invalid options received from the server");
-        }
-
-        // Convert challenge and user ID to ArrayBuffers
-        options.challenge = Uint8Array.from(atob(options.challenge), c => c.charCodeAt(0)).buffer;
-        options.user.id = Uint8Array.from(atob(options.user.id), c => c.charCodeAt(0)).buffer;
-
-        // Call WebAuthn API to create credentials
-        const credential = await navigator.credentials.create({ publicKey: options });
-
-        // Log the credential to verify `rawId` and `id`
-        console.log("Generated Credential:", credential);
-
-        // Send credential to the server
-        const credentialResponse = {
-            id: credential.id,
-            rawId: btoa(String.fromCharCode(...new Uint8Array(credential.rawId))),
-            response: {
-                clientDataJSON: btoa(String.fromCharCode(...new Uint8Array(credential.response.clientDataJSON))),
-                attestationObject: btoa(String.fromCharCode(...new Uint8Array(credential.response.attestationObject))),
-            },
-            type: credential.type,
-        };
-
-        // Log the prepared data for debugging
-        console.log("Prepared Credential Response:", credentialResponse);
-
-
-        const result = await fetch('/api/register', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(credentialResponse),
-        });
-
-        console.log(await result.json());
-    } catch (error) {
-        console.error("Registration failed", error);
+    function showStatus(message, isError = false) {
+        statusDisplay.textContent = message;
+        statusDisplay.style.display = 'block';
+        statusDisplay.className = 'status-message ' + (isError ? 'error' : 'success');
     }
-});
 
+    function hideStatus() {
+        statusDisplay.style.display = 'none';
+    }
 
-document.getElementById('login-btn').addEventListener('click', async () => {
-    try {
-        // Fetch authentication options from the server
-        const response = await fetch('/api/auth/options');
-        const options = await response.json();
+    if (!window.PublicKeyCredential) {
+        console.error('WebAuthn is not supported by this browser');
+        showStatus('WebAuthn is not supported by this browser', true);
+        registerButton.disabled = true;
+        authenticateButton.disabled = true;
+    }
 
-        // Log the options for debugging
-        console.log("Authentication Options from Server:", options);
+    console.log('Scripts loaded');
+    console.log('Register button:', registerButton);
+    console.log('Authenticate button:', authenticateButton);
 
-        // // Decode Base64-encoded fields into ArrayBuffer
-        // options.challenge = Uint8Array.from(atob(options.challenge), c => c.charCodeAt(0)).buffer;
-        // options.allowCredentials.forEach((cred) => {
-        //     cred.id = Uint8Array.from(atob(cred.id), c => c.charCodeAt(0)).buffer;
-        // });
-        // Decode Base64-encoded fields into ArrayBuffer
+    // Debug event handlers
+    registerButton.onclick = () => {
+        console.log('Register button clicked');
+        showStatus('Registration attempt...');
+    };
+
+    authenticateButton.onclick = () => {
+        console.log('Authenticate button clicked');
+        showStatus('Authentication attempt...');
+    };
+
+    function bufferToBase64(buffer) {
+        return btoa(String.fromCharCode(...new Uint8Array(buffer)));
+    }
+
+    function base64ToBuffer(base64) {
+        const binary = window.atob(base64);
+        const buffer = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) {
+            buffer[i] = binary.charCodeAt(i);
+        }
+        return buffer.buffer;
+    }
+
+    registerButton.addEventListener('click', async () => {
         try {
-            options.challenge = Uint8Array.from(atob(options.challenge), c => c.charCodeAt(0)).buffer;
-            options.allowCredentials.forEach((cred) => {
-                cred.id = Uint8Array.from(atob(cred.id), c => c.charCodeAt(0)).buffer;
+            hideStatus();
+            
+            const optionsResponse = await fetch('/api/register/options');
+            const options = await optionsResponse.json();
+
+            if (options.error) {
+                throw new Error(options.error);
+            }
+
+            options.challenge = base64ToBuffer(options.challenge);
+            options.user.id = base64ToBuffer(options.user.id);
+
+            const credential = await navigator.credentials.create({
+                publicKey: options
             });
+
+            const registrationData = {
+                id: credential.id,
+                rawId: bufferToBase64(credential.rawId),
+                response: {
+                    clientDataJSON: bufferToBase64(credential.response.clientDataJSON),
+                    attestationObject: bufferToBase64(credential.response.attestationObject)
+                },
+                type: credential.type
+            };
+
+            const registerResponse = await fetch('/api/register', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(registrationData)
+            });
+
+            const registerResult = await registerResponse.json();
+
+            if (registerResult.error) {
+                throw new Error(registerResult.error);
+            }
+
+            showStatus('Registration successful!');
         } catch (error) {
-            console.error("Base64 decoding failed", error);
-            throw new Error("Failed to decode Base64 fields from authentication options.");
+            console.error('Registration error:', error);
+            showStatus(error.message || 'Registration failed', true);
         }
+    });
 
-        // Call WebAuthn API to request assertion
-        const assertion = await navigator.credentials.get({ publicKey: options });
+    authenticateButton.addEventListener('click', async () => {
+        try {
+            hideStatus();
 
-        // Prepare assertion data to send to the server
-        const assertionResponse = {
-            id: assertion.id,
-            rawId: btoa(String.fromCharCode(...new Uint8Array(assertion.rawId))),
-            response: {
-                clientDataJSON: btoa(String.fromCharCode(...new Uint8Array(assertion.response.clientDataJSON))),
-                authenticatorData: btoa(String.fromCharCode(...new Uint8Array(assertion.response.authenticatorData))),
-                signature: btoa(String.fromCharCode(...new Uint8Array(assertion.response.signature))),
-            },
-            type: assertion.type,
-        };
+            const optionsResponse = await fetch('/api/auth/options');
+            const options = await optionsResponse.json();
 
-        // Send assertion to the server for verification
-        const verifyResponse = await fetch('/api/auth/verify', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(assertionResponse),
-        });
+            if (options.error) {
+                throw new Error(options.error);
+            }
 
-        const result = await verifyResponse.json();
-        if (result.success) {
-            alert("Login successful!");
-        } else {
-            alert("Login failed.");
+            options.challenge = base64ToBuffer(options.challenge);
+            if (options.allowCredentials) {
+                options.allowCredentials = options.allowCredentials.map(credential => ({
+                    ...credential,
+                    id: base64ToBuffer(credential.id)
+                }));
+            }
+
+            const assertion = await navigator.credentials.get({
+                publicKey: options
+            });
+
+            const authData = {
+                id: assertion.id,
+                rawId: bufferToBase64(assertion.rawId),
+                response: {
+                    clientDataJSON: bufferToBase64(assertion.response.clientDataJSON),
+                    authenticatorData: bufferToBase64(assertion.response.authenticatorData),
+                    signature: bufferToBase64(assertion.response.signature),
+                    userHandle: assertion.response.userHandle ? bufferToBase64(assertion.response.userHandle) : null
+                },
+                type: assertion.type
+            };
+
+            const verifyResponse = await fetch('/api/auth/verify', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(authData)
+            });
+
+            const verifyResult = await verifyResponse.json();
+
+            if (verifyResult.error) {
+                throw new Error(verifyResult.error);
+            }
+
+            showStatus('Authentication successful!');
+        } catch (error) {
+            console.error('Authentication error:', error);
+            showStatus(error.message || 'Authentication failed', true);
         }
-    } catch (error) {
-        console.error("Authentication failed", error);
-    }
+    });
 });
 

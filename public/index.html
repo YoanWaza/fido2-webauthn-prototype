@@ -3,13 +3,36 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>FIDO2/WebAuthn</title>
+    <title>FIDO2 WebAuthn Demo</title>
     <link rel="stylesheet" href="styles.css">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
-    <h1>FIDO2/WebAuthn Prototype</h1>
-    <button id="register-btn">Register</button>
-    <button id="login-btn">Login</button>
-    <script src="scripts.js"></script>
+    <div class="container">
+        <div class="auth-card">
+            <div class="logo">
+                <div class="webauthn-logo">
+                    <span class="logo-text">Web<span class="highlight">Authn</span></span>
+                    <span class="logo-subtitle">FIDO2 Authentication</span>
+                </div>
+            </div>
+            <h1>Secure Authentication</h1>
+            <p class="subtitle">Passwordless login with FIDO2</p>
+            
+            <div class="button-group">
+                <button id="registerButton" class="btn btn-primary">
+                    <span class="btn-icon">➕</span>
+                    Register
+                </button>
+                <button id="authenticateButton" class="btn btn-secondary">
+                    <span class="btn-icon">🔐</span>
+                    Login
+                </button>
+            </div>
+
+            <div id="status" class="status-message"></div>
+        </div>
+    </div>
 </body>
+<script src="scripts.js"></script>
 </html>
